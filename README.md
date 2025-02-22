@@ -1,6 +1,6 @@
 # Window Inspector 🔍
 
-An app to inspect Windows UI elements. I made this to make automation easier for myself. Made with WPF and
+An app to inspect Windows UI elements. I made this to make automation easier for myself. Made with WPF and ☕
 
 ## Features
 - Does what it says on the tin
