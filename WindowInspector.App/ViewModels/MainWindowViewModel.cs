@@ -4,33 +4,76 @@ using System.Text;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Input;
-using System.Windows.Threading;
 using WindowInspector.App.Commands;
 using WindowInspector.App.Helpers;
+using WindowInspector.App.Services;
 
 namespace WindowInspector.App.ViewModels;
 
 public class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 {
-    private readonly DispatcherTimer _cursorTrackingTimer;
+    private readonly IHoverWatcher _hoverWatcher;
     private string _statusText = "Ready to inspect elements...";
     private string _hierarchyText = "Hover over a UI element to inspect it...";
     private Point _cursorPosition;
     private DateTime _lastConsoleUpdate = DateTime.MinValue;
     private AutomationElement? _currentElement;
     private RelayCommand? _copyToClipboardCommand;
+    private RelayCommand? _togglePauseCommand;
+    private bool _isPaused;
 
     public MainWindowViewModel()
     {
-        _cursorTrackingTimer = new DispatcherTimer
-        {
-            Interval = TimeSpan.FromMilliseconds(100) // Update 10 times per second
-        };
-        _cursorTrackingTimer.Tick += CursorTrackingTimer_Tick;
-        _cursorTrackingTimer.Start();
+        _hoverWatcher = new HoverWatcher();
+        _hoverWatcher.ElementHovered += OnElementHovered;
+        _hoverWatcher.Start();
 
         Console.WriteLine("Window Inspector started. Tracking cursor position...");
     }
+
+    private void OnElementHovered(object? sender, HoverWatcherEventArgs e)
+    {
+        if (!IsPaused)
+        {
+            _cursorPosition = e.CursorPosition;
+            _currentElement = e.Element;
+            
+            UpdateStatusText();
+            UpdateHierarchyText();
+            UpdateConsoleOutput();
+        }
+    }
+
+    public bool IsPaused
+    {
+        get => _isPaused;
+        private set
+        {
+            if (_isPaused != value)
+            {
+                _isPaused = value;
+                OnPropertyChanged();
+                
+                if (_isPaused)
+                {
+                    _hoverWatcher.Stop();
+                    StatusText = "Tracking paused. Click Resume or press Space to continue tracking.";
+                }
+                else
+                {
+                    _hoverWatcher.Start();
+                    // Element will update automatically when tracking resumes
+                }
+            }
+        }
+    }
+
+    public IRelayCommand TogglePauseCommand => _togglePauseCommand ??= new RelayCommand(
+        execute: _ =>
+        {
+            IsPaused = !IsPaused;
+        }
+    );
 
     public IRelayCommand CopyToClipboardCommand => _copyToClipboardCommand ??= new RelayCommand(
         execute: _ =>
@@ -42,7 +85,7 @@ public class MainWindowViewModel : INotifyPropertyChanged, IDisposable
                 StatusText = "Copied to clipboard!";
                 
                 // Reset status after 2 seconds
-                var timer = new DispatcherTimer
+                var timer = new System.Windows.Threading.DispatcherTimer
                 {
                     Interval = TimeSpan.FromSeconds(2)
                 };
@@ -88,37 +131,15 @@ public class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    public Point CursorPosition
-    {
-        get => _cursorPosition;
-        private set
-        {
-            if (_cursorPosition != value)
-            {
-                _cursorPosition = value;
-                OnPropertyChanged();
-                UpdateElement();
-            }
-        }
-    }
-
-    private void CursorTrackingTimer_Tick(object? sender, EventArgs e)
-    {
-        CursorPosition = Win32Helpers.GetCursorPosition();
-    }
-
-    private void UpdateElement()
-    {
-        _currentElement = ElementTracker.GetElementAt(CursorPosition);
-        UpdateStatusText();
-        UpdateHierarchyText();
-        UpdateConsoleOutput();
-    }
-
     private void UpdateStatusText()
     {
+        if (IsPaused)
+        {
+            return; // Keep the "paused" message
+        }
+
         var elementDesc = ElementTracker.GetElementDescription(_currentElement);
-        StatusText = $"Cursor at: X={CursorPosition.X}, Y={CursorPosition.Y} | {elementDesc}";
+        StatusText = $"Cursor at: X={_cursorPosition.X}, Y={_cursorPosition.Y} | {elementDesc}";
     }
 
     private void UpdateHierarchyText()
@@ -129,33 +150,7 @@ public class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
-        var sb = new StringBuilder();
-        sb.AppendLine("Element Details:");
-        sb.AppendLine("----------------");
-        
-        // Add basic properties
-        sb.AppendLine($"Type: {_currentElement.Current.ControlType.ProgrammaticName.Replace("ControlType.", "")}");
-        sb.AppendLine($"Name: {_currentElement.Current.Name}");
-        sb.AppendLine($"Class: {_currentElement.Current.ClassName}");
-        sb.AppendLine($"AutomationId: {_currentElement.Current.AutomationId}");
-        
-        // Add bounds information
-        var rect = _currentElement.Current.BoundingRectangle;
-        sb.AppendLine($"Bounds: X={rect.X}, Y={rect.Y}, Width={rect.Width}, Height={rect.Height}");
-        
-        // Add process info if available
-        try
-        {
-            var processId = _currentElement.Current.ProcessId;
-            var process = System.Diagnostics.Process.GetProcessById(processId);
-            sb.AppendLine($"Process: {process.ProcessName} (ID: {processId})");
-        }
-        catch
-        {
-            sb.AppendLine("Process: Unknown");
-        }
-
-        HierarchyText = sb.ToString();
+        HierarchyText = ElementTracker.BuildDetailedElementString(_currentElement);
     }
 
     private void UpdateConsoleOutput()
@@ -165,7 +160,7 @@ public class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         if ((now - _lastConsoleUpdate).TotalSeconds >= 1)
         {
             var elementDesc = ElementTracker.GetElementDescription(_currentElement);
-            Console.WriteLine($"[{now:HH:mm:ss}] Cursor at: X={CursorPosition.X}, Y={CursorPosition.Y}");
+            Console.WriteLine($"[{now:HH:mm:ss}] Cursor at: X={_cursorPosition.X}, Y={_cursorPosition.Y}");
             Console.WriteLine($"Element: {elementDesc}");
             _lastConsoleUpdate = now;
         }
@@ -174,8 +169,8 @@ public class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     public void Dispose()
     {
         Console.WriteLine("Window Inspector stopping...");
-        _cursorTrackingTimer.Stop();
-        _cursorTrackingTimer.Tick -= CursorTrackingTimer_Tick;
+        _hoverWatcher.ElementHovered -= OnElementHovered;
+        _hoverWatcher.Dispose();
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

@@ -25,15 +25,14 @@
 **UI Components**
 - [x] T6: Add hierarchy TextBox with vertical scroll
 - [x] T7: Create "Copy to Clipboard" button stub
-- [ ] T8: Implement pause toggle button UI
+- [x] T8: Implement pause toggle button UI
 
 **Data Formatting**
-- [ ] T9: Build element details string
+- [x] T9: Build element details string
   ```csharp
-  
   // Include: ControlType, Name, AutomationId, Bounds
   ```
-- [ ] T10: Parent hierarchy collection (child → root order)
+- [x] T10: Parent hierarchy collection (child → root order)
 
 ## Phase 3: Real-Time Tracking
 - [ ] T11: Implement HoverWatcher service
