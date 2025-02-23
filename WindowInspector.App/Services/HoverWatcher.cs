@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Threading;
 using WindowInspector.App.Helpers;
+using Microsoft.Win32;
 
 namespace WindowInspector.App.Services;
 
@@ -14,6 +15,8 @@ public class HoverWatcher : IDisposable
     private DateTime _lastElementUpdate = DateTime.MinValue;
     private Point _lastCursorPos;
     private AutomationElement? _lastElement;
+    private DateTime _lastIntervalUpdate = DateTime.MinValue;
+    private readonly TimeSpan _intervalUpdateThreshold = TimeSpan.FromSeconds(5);
 
     public event EventHandler<AutomationElement?>? ElementChanged;
     public event EventHandler<Point>? CursorMoved;
@@ -34,10 +37,11 @@ public class HoverWatcher : IDisposable
                 }
                 else
                 {
+                    UpdatePollingInterval(); // Update interval before resuming
                     _timer.Start();
                     Logger.Instance.Info("Element tracking resumed");
                     // Force an immediate update when resuming
-                    CheckElementUnderCursor();
+                    _dispatcher.BeginInvoke(() => CheckElementUnderCursor());
                 }
             }
         }
@@ -48,11 +52,25 @@ public class HoverWatcher : IDisposable
         _dispatcher = Dispatcher.CurrentDispatcher;
         _timer = new DispatcherTimer
         {
-            Interval = updateInterval ?? TimeSpan.FromMilliseconds(100) // Default to 10 times per second
+            Interval = updateInterval ?? SystemInfoHelper.GetOptimalPollingInterval()
         };
         _timer.Tick += Timer_Tick;
-        _timer.Start();
 
+        // Register for power mode changes
+        SystemEvents.PowerModeChanged += (s, e) =>
+        {
+            if (e.Mode == PowerModes.Resume)
+            {
+                UpdatePollingInterval();
+                if (!_isPaused) _timer.Start();
+            }
+            else if (e.Mode == PowerModes.Suspend)
+            {
+                _timer.Stop();
+            }
+        };
+
+        _timer.Start();
         Logger.Instance.Info($"HoverWatcher started with {_timer.Interval.TotalMilliseconds}ms interval");
     }
 
@@ -60,8 +78,19 @@ public class HoverWatcher : IDisposable
     {
         if (!IsPaused)
         {
+            // Update polling interval periodically
+            if ((DateTime.Now - _lastIntervalUpdate) > _intervalUpdateThreshold)
+            {
+                UpdatePollingInterval();
+            }
             CheckElementUnderCursor();
         }
+    }
+
+    private void UpdatePollingInterval()
+    {
+        _timer.Interval = SystemInfoHelper.GetOptimalPollingInterval();
+        _lastIntervalUpdate = DateTime.Now;
     }
 
     private void CheckElementUnderCursor()
@@ -118,7 +147,13 @@ public class HoverWatcher : IDisposable
     public void Dispose()
     {
         Logger.Instance.Info("HoverWatcher stopping...");
+        SystemEvents.PowerModeChanged -= SystemEvents_PowerModeChanged;
         _timer.Stop();
         _timer.Tick -= Timer_Tick;
+    }
+
+    private void SystemEvents_PowerModeChanged(object sender, PowerModeChangedEventArgs e)
+    {
+        // Handler is added in constructor
     }
 } 

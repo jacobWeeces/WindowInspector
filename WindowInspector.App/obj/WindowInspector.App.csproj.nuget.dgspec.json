@@ -51,6 +51,10 @@
         "net8.0-windows7.0": {
           "targetAlias": "net8.0-windows",
           "dependencies": {
+            "Microsoft.Win32.SystemEvents": {
+              "target": "Package",
+              "version": "[9.0.2, )"
+            },
             "Microsoft.Windows.Compatibility": {
               "target": "Package",
               "version": "[8.0.0, )"

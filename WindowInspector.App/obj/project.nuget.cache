@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "dgSpecHash": "FJ7sE9ESl1k=",
+  "dgSpecHash": "Kx6eDcLQC90=",
   "success": true,
   "projectFilePath": "C:\\Users\\Jacob\\Documents\\Indie Projects\\WPF App\\WindowInspector.App\\WindowInspector.App.csproj",
   "expectedPackageFiles": [
@@ -9,7 +9,7 @@
     "C:\\Users\\Jacob\\.nuget\\packages\\microsoft.netcore.platforms\\3.1.0\\microsoft.netcore.platforms.3.1.0.nupkg.sha512",
     "C:\\Users\\Jacob\\.nuget\\packages\\microsoft.win32.registry\\4.7.0\\microsoft.win32.registry.4.7.0.nupkg.sha512",
     "C:\\Users\\Jacob\\.nuget\\packages\\microsoft.win32.registry.accesscontrol\\8.0.0\\microsoft.win32.registry.accesscontrol.8.0.0.nupkg.sha512",
-    "C:\\Users\\Jacob\\.nuget\\packages\\microsoft.win32.systemevents\\8.0.0\\microsoft.win32.systemevents.8.0.0.nupkg.sha512",
+    "C:\\Users\\Jacob\\.nuget\\packages\\microsoft.win32.systemevents\\9.0.2\\microsoft.win32.systemevents.9.0.2.nupkg.sha512",
     "C:\\Users\\Jacob\\.nuget\\packages\\microsoft.windows.compatibility\\8.0.0\\microsoft.windows.compatibility.8.0.0.nupkg.sha512",
     "C:\\Users\\Jacob\\.nuget\\packages\\runtime.linux-arm.runtime.native.system.io.ports\\8.0.0\\runtime.linux-arm.runtime.native.system.io.ports.8.0.0.nupkg.sha512",
     "C:\\Users\\Jacob\\.nuget\\packages\\runtime.linux-arm64.runtime.native.system.io.ports\\8.0.0\\runtime.linux-arm64.runtime.native.system.io.ports.8.0.0.nupkg.sha512",
