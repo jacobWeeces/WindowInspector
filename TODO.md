@@ -35,7 +35,7 @@
 - [x] T10: Parent hierarchy collection (child → root order)
 
 ## Phase 3: Real-Time Tracking
-- [ ] T11: Implement HoverWatcher service
+- [x] T11: Implement HoverWatcher service
   ```csharp
   // Use System.Timers.Timer with 100ms interval
   ```
