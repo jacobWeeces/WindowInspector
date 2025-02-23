@@ -48,26 +48,42 @@
                 BorderBrush="#DDDDDD"
                 BorderThickness="1"
                 Margin="0,0,0,10">
-            <TextBox x:Name="HierarchyTextBox"
-                     Text="{Binding HierarchyText, Mode=OneWay}"
-                     IsReadOnly="True"
-                     TextWrapping="Wrap"
-                     VerticalScrollBarVisibility="Auto"
-                     HorizontalScrollBarVisibility="Auto"
-                     FontFamily="Consolas"
-                     Padding="8"
-                     Background="#FAFAFA"
-                     BorderThickness="0">
-                <TextBox.Style>
-                    <Style TargetType="TextBox">
-                        <Style.Triggers>
-                            <Trigger Property="IsReadOnly" Value="True">
-                                <Setter Property="Foreground" Value="#333333"/>
-                            </Trigger>
-                        </Style.Triggers>
-                    </Style>
-                </TextBox.Style>
-            </TextBox>
+            <Grid>
+                <!-- Update indicator overlay -->
+                <Border Background="#80FFFFFF"
+                        Visibility="{Binding IsUpdating, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <TextBlock Text="Updating..."
+                             HorizontalAlignment="Center"
+                             VerticalAlignment="Center"
+                             FontSize="16"
+                             Foreground="#666666"/>
+                </Border>
+
+                <!-- Main text box -->
+                <TextBox x:Name="HierarchyTextBox"
+                         Text="{Binding HierarchyText, Mode=OneWay}"
+                         IsReadOnly="True"
+                         TextWrapping="Wrap"
+                         VerticalScrollBarVisibility="Auto"
+                         HorizontalScrollBarVisibility="Auto"
+                         FontFamily="Consolas"
+                         Padding="8"
+                         Background="#FAFAFA"
+                         BorderThickness="0">
+                    <TextBox.Style>
+                        <Style TargetType="TextBox">
+                            <Style.Triggers>
+                                <Trigger Property="IsReadOnly" Value="True">
+                                    <Setter Property="Foreground" Value="#333333"/>
+                                </Trigger>
+                                <DataTrigger Binding="{Binding IsUpdating}" Value="True">
+                                    <Setter Property="Opacity" Value="0.7"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBox.Style>
+                </TextBox>
+            </Grid>
         </Border>
 
         <!-- Status bar with buttons -->
@@ -87,7 +103,30 @@
                     Margin="0,0,10,0">
                 <TextBlock Text="{Binding StatusText}"
                            TextWrapping="Wrap"
-                           VerticalAlignment="Center"/>
+                           VerticalAlignment="Center">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding StatusText}" Value="Copied to clipboard!">
+                                    <Setter Property="Foreground" Value="#28a745"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding StatusText}" Value="Resuming element tracking...">
+                                    <Setter Property="Foreground" Value="#17a2b8"/>
+                                </DataTrigger>
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding StatusText}" Value="Tracking paused. Click Resume to continue tracking."/>
+                                        <Condition Binding="{Binding IsPaused}" Value="True"/>
+                                    </MultiDataTrigger.Conditions>
+                                    <Setter Property="Foreground" Value="#ffc107"/>
+                                </MultiDataTrigger>
+                                <DataTrigger Binding="{Binding StatusText}" Value="Error">
+                                    <Setter Property="Foreground" Value="#dc3545"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
             </Border>
 
             <!-- Pause button -->

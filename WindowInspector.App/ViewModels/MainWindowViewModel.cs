@@ -4,6 +4,7 @@ using System.Text;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Input;
+using System.Windows.Threading;
 using WindowInspector.App.Commands;
 using WindowInspector.App.Helpers;
 using WindowInspector.App.Services;
@@ -12,57 +13,66 @@ namespace WindowInspector.App.ViewModels;
 
 public class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 {
-    private readonly IHoverWatcher _hoverWatcher;
+    private readonly HoverWatcher _hoverWatcher;
+    private readonly DispatcherTimer _statusResetTimer;
     private string _statusText = "Ready to inspect elements...";
     private string _hierarchyText = "Hover over a UI element to inspect it...";
     private Point _cursorPosition;
-    private DateTime _lastConsoleUpdate = DateTime.MinValue;
     private AutomationElement? _currentElement;
     private RelayCommand? _copyToClipboardCommand;
     private RelayCommand? _togglePauseCommand;
-    private bool _isPaused;
+    private bool _isUpdating;
 
     public MainWindowViewModel()
     {
         _hoverWatcher = new HoverWatcher();
-        _hoverWatcher.ElementHovered += OnElementHovered;
-        _hoverWatcher.Start();
+        _hoverWatcher.CursorMoved += HoverWatcher_CursorMoved;
+        _hoverWatcher.ElementChanged += HoverWatcher_ElementChanged;
+        _hoverWatcher.ErrorOccurred += HoverWatcher_ErrorOccurred;
+
+        _statusResetTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(2)
+        };
+        _statusResetTimer.Tick += (s, e) =>
+        {
+            _statusResetTimer.Stop();
+            UpdateStatusText(); // Revert to normal status
+        };
 
         Console.WriteLine("Window Inspector started. Tracking cursor position...");
     }
 
-    private void OnElementHovered(object? sender, HoverWatcherEventArgs e)
+    public bool IsUpdating
     {
-        if (!IsPaused)
+        get => _isUpdating;
+        private set
         {
-            _cursorPosition = e.CursorPosition;
-            _currentElement = e.Element;
-            
-            UpdateStatusText();
-            UpdateHierarchyText();
-            UpdateConsoleOutput();
+            if (_isUpdating != value)
+            {
+                _isUpdating = value;
+                OnPropertyChanged();
+            }
         }
     }
 
     public bool IsPaused
     {
-        get => _isPaused;
+        get => _hoverWatcher.IsPaused;
         private set
         {
-            if (_isPaused != value)
+            if (_hoverWatcher.IsPaused != value)
             {
-                _isPaused = value;
+                _hoverWatcher.IsPaused = value;
                 OnPropertyChanged();
                 
-                if (_isPaused)
+                if (value)
                 {
-                    _hoverWatcher.Stop();
-                    StatusText = "Tracking paused. Click Resume or press Space to continue tracking.";
+                    StatusText = "Tracking paused. Click Resume to continue tracking.";
                 }
                 else
                 {
-                    _hoverWatcher.Start();
-                    // Element will update automatically when tracking resumes
+                    StatusText = "Resuming element tracking...";
                 }
             }
         }
@@ -81,24 +91,11 @@ public class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             try
             {
                 Clipboard.SetText(HierarchyText);
-                var originalStatus = StatusText;
-                StatusText = "Copied to clipboard!";
-                
-                // Reset status after 2 seconds
-                var timer = new System.Windows.Threading.DispatcherTimer
-                {
-                    Interval = TimeSpan.FromSeconds(2)
-                };
-                timer.Tick += (s, e) =>
-                {
-                    StatusText = originalStatus;
-                    timer.Stop();
-                };
-                timer.Start();
+                ShowTemporaryStatus("Copied to clipboard!");
             }
             catch (Exception ex)
             {
-                StatusText = "Failed to copy to clipboard: " + ex.Message;
+                ShowTemporaryStatus($"Failed to copy to clipboard: {ex.Message}", isError: true);
             }
         },
         canExecute: _ => !string.IsNullOrWhiteSpace(HierarchyText) && HierarchyText != "No element found under cursor"
@@ -107,7 +104,7 @@ public class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     public string StatusText
     {
         get => _statusText;
-        set
+        private set
         {
             if (_statusText != value)
             {
@@ -120,7 +117,7 @@ public class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     public string HierarchyText
     {
         get => _hierarchyText;
-        set
+        private set
         {
             if (_hierarchyText != value)
             {
@@ -131,6 +128,45 @@ public class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
+    public Point CursorPosition
+    {
+        get => _cursorPosition;
+        private set
+        {
+            if (_cursorPosition != value)
+            {
+                _cursorPosition = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    private void HoverWatcher_CursorMoved(object? sender, Point cursorPos)
+    {
+        CursorPosition = cursorPos;
+    }
+
+    private void HoverWatcher_ElementChanged(object? sender, AutomationElement? element)
+    {
+        IsUpdating = true;
+        _currentElement = element;
+        UpdateStatusText();
+        UpdateHierarchyText();
+        IsUpdating = false;
+    }
+
+    private void HoverWatcher_ErrorOccurred(object? sender, Exception ex)
+    {
+        ShowTemporaryStatus($"Error: {ex.Message}", isError: true);
+    }
+
+    private void ShowTemporaryStatus(string message, bool isError = false)
+    {
+        _statusResetTimer.Stop();
+        StatusText = isError ? $"⚠️ {message}" : message;
+        _statusResetTimer.Start();
+    }
+
     private void UpdateStatusText()
     {
         if (IsPaused)
@@ -139,7 +175,7 @@ public class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         }
 
         var elementDesc = ElementTracker.GetElementDescription(_currentElement);
-        StatusText = $"Cursor at: X={_cursorPosition.X}, Y={_cursorPosition.Y} | {elementDesc}";
+        StatusText = $"Cursor at: X={CursorPosition.X}, Y={CursorPosition.Y} | {elementDesc}";
     }
 
     private void UpdateHierarchyText()
@@ -153,23 +189,10 @@ public class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         HierarchyText = ElementTracker.BuildDetailedElementString(_currentElement);
     }
 
-    private void UpdateConsoleOutput()
-    {
-        // Only update console once per second to avoid flooding
-        var now = DateTime.Now;
-        if ((now - _lastConsoleUpdate).TotalSeconds >= 1)
-        {
-            var elementDesc = ElementTracker.GetElementDescription(_currentElement);
-            Console.WriteLine($"[{now:HH:mm:ss}] Cursor at: X={_cursorPosition.X}, Y={_cursorPosition.Y}");
-            Console.WriteLine($"Element: {elementDesc}");
-            _lastConsoleUpdate = now;
-        }
-    }
-
     public void Dispose()
     {
         Console.WriteLine("Window Inspector stopping...");
-        _hoverWatcher.ElementHovered -= OnElementHovered;
+        _statusResetTimer.Stop();
         _hoverWatcher.Dispose();
     }
 

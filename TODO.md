@@ -39,27 +39,27 @@
   ```csharp
   // Use System.Timers.Timer with 100ms interval
   ```
-- [ ] T12: Connect watcher to UI updates
-- [ ] T13: Add error handling for stale elements
-- [ ] T14: Implement pause functionality
+- [x] T12: Connect watcher to UI updates
+- [x] T13: Add error handling for stale elements
+- [x] T14: Implement pause functionality
 
 ## Phase 4: Polish & Safety
-- [ ] T15: Secure Win32 API calls
+- [x] T15: Secure Win32 API calls
   ```csharp
   // Proper DllImport declarations in Win32Helpers.cs
   ```
-- [ ] T16: Add exception logging
+- [x] T16: Add exception logging
   ```csharp
   // Implement Logger.cs with file writing
   ```
-- [ ] T17: Create app manifest for admin privileges
+- [x] T17: Create app manifest for admin privileges
 
 ## Testing Checklist
 - [ ] Basic detection: Hover over Notepad text area
 - [ ] Hierarchy order: Verify child-first display
 - [ ] Copy function: Test pasting into Notepad
 - [ ] Memory check: Monitor for leaks during long sessions
-- [ ] Edge case: Hover over taskbar clock
+- [ ] Edge case: Hover over taskbar clock 
 
 ## Future Phase Snippets
 
