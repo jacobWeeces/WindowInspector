@@ -88,9 +88,30 @@ public class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     public IRelayCommand CopyToClipboardCommand => _copyToClipboardCommand ??= new RelayCommand(
         execute: _ =>
         {
+            if (IsUpdating)
+            {
+                ShowTemporaryStatus("Please wait for element information to finish updating...", isError: true);
+                return;
+            }
+
+            var textToCopy = HierarchyText;
+            if (string.IsNullOrWhiteSpace(textToCopy))
+            {
+                ShowTemporaryStatus("Nothing to copy - text is empty", isError: true);
+                return;
+            }
+
             try
             {
-                Clipboard.SetText(HierarchyText);
+                // Ensure we're on the UI thread
+                if (!Application.Current.Dispatcher.CheckAccess())
+                {
+                    Application.Current.Dispatcher.Invoke(() => Clipboard.SetText(textToCopy));
+                }
+                else
+                {
+                    Clipboard.SetText(textToCopy);
+                }
                 ShowTemporaryStatus("Copied to clipboard!");
             }
             catch (Exception ex)
@@ -98,7 +119,9 @@ public class MainWindowViewModel : INotifyPropertyChanged, IDisposable
                 ShowTemporaryStatus($"Failed to copy to clipboard: {ex.Message}", isError: true);
             }
         },
-        canExecute: _ => !string.IsNullOrWhiteSpace(HierarchyText) && HierarchyText != "No element found under cursor"
+        canExecute: _ => !string.IsNullOrWhiteSpace(HierarchyText) && 
+                        HierarchyText != "No element found under cursor" &&
+                        !IsUpdating
     );
 
     public string StatusText

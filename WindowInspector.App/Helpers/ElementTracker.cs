@@ -1,6 +1,7 @@
 using System.Text;
 using System.Windows;
 using System.Windows.Automation;
+using System.Runtime.CompilerServices;
 using WindowInspector.App.Services;
 
 namespace WindowInspector.App.Helpers;
@@ -16,6 +17,42 @@ public static class ElementTracker
         "SysListView32" // Desktop icons list view
     };
 
+    // Cache for element fingerprints
+    private static readonly ConditionalWeakTable<AutomationElement, ElementFingerprint> _fingerprintCache = new();
+
+    private sealed class ElementFingerprint
+    {
+        public int ProcessId { get; }
+        public Rect BoundingRectangle { get; }
+        public int NameHash { get; }
+        public int ClassNameHash { get; }
+        public int ControlTypeId { get; }
+
+        public ElementFingerprint(AutomationElement element)
+        {
+            ProcessId = element.Current.ProcessId;
+            BoundingRectangle = element.Current.BoundingRectangle;
+            NameHash = element.Current.Name?.GetHashCode() ?? 0;
+            ClassNameHash = element.Current.ClassName?.GetHashCode() ?? 0;
+            ControlTypeId = element.Current.ControlType.Id;
+        }
+
+        public override bool Equals(object? obj)
+        {
+            if (obj is not ElementFingerprint other) return false;
+            return ProcessId == other.ProcessId &&
+                   BoundingRectangle == other.BoundingRectangle &&
+                   NameHash == other.NameHash &&
+                   ClassNameHash == other.ClassNameHash &&
+                   ControlTypeId == other.ControlTypeId;
+        }
+
+        public override int GetHashCode()
+        {
+            return HashCode.Combine(ProcessId, BoundingRectangle, NameHash, ClassNameHash, ControlTypeId);
+        }
+    }
+
     /// <summary>
     /// Gets the UI Automation element at the specified screen coordinates
     /// </summary>
@@ -25,7 +62,13 @@ public static class ElementTracker
     {
         try
         {
-            return AutomationElement.FromPoint(new System.Windows.Point(screenPoint.X, screenPoint.Y));
+            var element = AutomationElement.FromPoint(new System.Windows.Point(screenPoint.X, screenPoint.Y));
+            if (element != null)
+            {
+                // Cache the element's fingerprint when we first encounter it
+                _ = GetOrCreateFingerprint(element);
+            }
+            return element;
         }
         catch (ElementNotAvailableException)
         {
@@ -37,6 +80,16 @@ public static class ElementTracker
             Logger.Instance.Error($"Error getting element at point: {ex.Message}");
             return null;
         }
+    }
+
+    private static ElementFingerprint GetOrCreateFingerprint(AutomationElement element)
+    {
+        if (!_fingerprintCache.TryGetValue(element, out var fingerprint))
+        {
+            fingerprint = new ElementFingerprint(element);
+            _fingerprintCache.Add(element, fingerprint);
+        }
+        return fingerprint;
     }
 
     /// <summary>
@@ -195,6 +248,29 @@ public static class ElementTracker
             // Section: Basic Information
             sb.AppendLine("Basic Information");
             sb.AppendLine("----------------");
+            
+            // Add keyboard shortcut information
+            var accessKey = GetElementProperty(element, e => e.AccessKey, string.Empty);
+            var acceleratorKey = GetElementProperty(element, e => e.AcceleratorKey, string.Empty);
+            
+            if (!string.IsNullOrEmpty(accessKey) || !string.IsNullOrEmpty(acceleratorKey))
+            {
+                sb.AppendLine("\nKeyboard Shortcuts");
+                sb.AppendLine("-----------------");
+                
+                if (!string.IsNullOrEmpty(accessKey))
+                {
+                    sb.AppendLine($"Access Key: {accessKey}");
+                }
+                
+                if (!string.IsNullOrEmpty(acceleratorKey))
+                {
+                    sb.AppendLine($"Accelerator Key: {acceleratorKey}");
+                }
+                
+                sb.AppendLine();
+            }
+
             sb.AppendLine($"Control Type: {GetElementProperty(element, e => e.ControlType.ProgrammaticName.Replace("ControlType.", ""), "[Unknown]")}");
             sb.AppendLine($"Name: {GetElementProperty(element, e => e.Name, "[No name]")}");
             sb.AppendLine($"Class Name: {GetElementProperty(element, e => e.ClassName, "[No class]")}");
@@ -300,6 +376,9 @@ public static class ElementTracker
         }
     }
 
+    /// <summary>
+    /// Compares two automation elements for equality using cached fingerprints
+    /// </summary>
     public static bool AreElementsEqual(AutomationElement? a, AutomationElement? b)
     {
         if (a == null && b == null) return true;
@@ -307,12 +386,10 @@ public static class ElementTracker
 
         try
         {
-            // Compare key properties that identify an element
-            return a.Current.ProcessId == b.Current.ProcessId &&
-                   a.Current.BoundingRectangle == b.Current.BoundingRectangle &&
-                   a.Current.Name == b.Current.Name &&
-                   a.Current.ClassName == b.Current.ClassName &&
-                   a.Current.ControlType == b.Current.ControlType;
+            // Use cached fingerprints for comparison
+            var fpA = GetOrCreateFingerprint(a);
+            var fpB = GetOrCreateFingerprint(b);
+            return fpA.Equals(fpB);
         }
         catch (Exception ex)
         {

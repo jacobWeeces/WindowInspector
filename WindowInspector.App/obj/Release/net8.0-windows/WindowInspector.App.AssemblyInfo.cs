@@ -11,9 +11,9 @@ using System;
 using System.Reflection;
 
 [assembly: System.Reflection.AssemblyCompanyAttribute("WindowInspector.App")]
-[assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
+[assembly: System.Reflection.AssemblyConfigurationAttribute("RElease")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+5c1313e7d64202133e8e2fc03ca98e460a1aa0e3")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+e65e24222b9ed5c3502bfaf29846f8205f04a461")]
 [assembly: System.Reflection.AssemblyProductAttribute("WindowInspector.App")]
 [assembly: System.Reflection.AssemblyTitleAttribute("WindowInspector.App")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

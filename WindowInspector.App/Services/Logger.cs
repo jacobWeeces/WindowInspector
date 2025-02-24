@@ -12,12 +12,18 @@ public sealed class Logger : IDisposable
 {
     private static readonly Lazy<Logger> _instance = new(() => new Logger());
     private readonly string _logDirectory;
-    private string _currentLogFile;  // Removed readonly since we need to update it during log rotation
+    private string _currentLogFile;
     private readonly BlockingCollection<LogEntry> _logQueue;
     private readonly CancellationTokenSource _cancellationTokenSource;
     private readonly Task _processQueueTask;
     private const int MAX_LOG_SIZE_MB = 10;
     private const int MAX_LOG_FILES = 5;
+    private readonly StringBuilder _logBuffer;
+    private const int FLUSH_THRESHOLD = 50;
+    private int _bufferedLineCount;
+    private readonly object _bufferLock = new();
+    private DateTime _lastFlushTime = DateTime.Now;
+    private readonly TimeSpan _maxBufferAge = TimeSpan.FromSeconds(1);
 
     public static Logger Instance => _instance.Value;
 
@@ -34,7 +40,8 @@ public sealed class Logger : IDisposable
         // Set up current log file with timestamp
         _currentLogFile = Path.Combine(_logDirectory, $"WindowInspector_{DateTime.Now:yyyyMMdd_HHmmss}.log");
 
-        // Initialize queue and processing
+        // Initialize buffer and queue
+        _logBuffer = new StringBuilder(4096);
         _logQueue = new BlockingCollection<LogEntry>();
         _cancellationTokenSource = new CancellationTokenSource();
         _processQueueTask = Task.Run(ProcessLogQueue);
@@ -83,6 +90,26 @@ public sealed class Logger : IDisposable
         _logQueue.Add(entry);
     }
 
+    private void BufferLogEntry(LogEntry entry, bool forceFlush = false)
+    {
+        var line = $"[{entry.Timestamp:yyyy-MM-dd HH:mm:ss.fff}] [{entry.Level}] [PID:{entry.ProcessId}] [TID:{entry.ThreadId}] {entry.Message}";
+        
+        lock (_bufferLock)
+        {
+            _logBuffer.AppendLine(line);
+            _bufferedLineCount++;
+
+            var shouldFlush = forceFlush ||
+                            _bufferedLineCount >= FLUSH_THRESHOLD ||
+                            (DateTime.Now - _lastFlushTime) >= _maxBufferAge;
+
+            if (shouldFlush)
+            {
+                _ = FlushBufferAsync();
+            }
+        }
+    }
+
     private async Task ProcessLogQueue()
     {
         while (!_cancellationTokenSource.Token.IsCancellationRequested)
@@ -90,8 +117,7 @@ public sealed class Logger : IDisposable
             try
             {
                 var entry = _logQueue.Take(_cancellationTokenSource.Token);
-                await WriteLogEntryAsync(entry);
-                await CheckLogSizeAndRotateAsync();
+                BufferLogEntry(entry);
             }
             catch (OperationCanceledException)
             {
@@ -104,12 +130,12 @@ public sealed class Logger : IDisposable
             }
         }
 
-        // Process remaining entries
+        // Process remaining entries and flush buffer on shutdown
         while (_logQueue.TryTake(out var entry))
         {
             try
             {
-                await WriteLogEntryAsync(entry);
+                BufferLogEntry(entry, true);
             }
             catch
             {
@@ -118,13 +144,22 @@ public sealed class Logger : IDisposable
         }
     }
 
-    private async Task WriteLogEntryAsync(LogEntry entry)
+    private async Task FlushBufferAsync()
     {
-        var line = $"[{entry.Timestamp:yyyy-MM-dd HH:mm:ss.fff}] [{entry.Level}] [PID:{entry.ProcessId}] [TID:{entry.ThreadId}] {entry.Message}";
-        
+        string contentToWrite;
+        lock (_bufferLock)
+        {
+            if (_logBuffer.Length == 0) return;
+            contentToWrite = _logBuffer.ToString();
+            _logBuffer.Clear();
+            _bufferedLineCount = 0;
+            _lastFlushTime = DateTime.Now;
+        }
+
         try
         {
-            await File.AppendAllLinesAsync(_currentLogFile, new[] { line });
+            await File.AppendAllTextAsync(_currentLogFile, contentToWrite);
+            await CheckLogSizeAndRotateAsync();
         }
         catch (Exception ex)
         {
@@ -139,8 +174,8 @@ public sealed class Logger : IDisposable
             var fileInfo = new FileInfo(_currentLogFile);
             if (fileInfo.Exists && fileInfo.Length > MAX_LOG_SIZE_MB * 1024 * 1024)
             {
-                // Close current file
-                await Task.Delay(100); // Small delay to ensure all writes are complete
+                // Ensure buffer is flushed before rotation
+                await FlushBufferAsync();
 
                 // Rotate files
                 var files = Directory.GetFiles(_logDirectory, "WindowInspector_*.log")
@@ -173,6 +208,11 @@ public sealed class Logger : IDisposable
         }
     }
 
+    public async Task FlushAsync()
+    {
+        await FlushBufferAsync();
+    }
+
     public void Dispose()
     {
         if (!_logQueue.IsAddingCompleted)
@@ -183,6 +223,8 @@ public sealed class Logger : IDisposable
             
             try
             {
+                // Ensure final flush
+                FlushBufferAsync().Wait(TimeSpan.FromSeconds(2));
                 _processQueueTask.Wait(TimeSpan.FromSeconds(2));
             }
             catch

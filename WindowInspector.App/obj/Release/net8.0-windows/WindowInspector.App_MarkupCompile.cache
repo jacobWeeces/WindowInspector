@@ -4,7 +4,7 @@
 winexe
 C#
 .cs
-C:\Users\Jacob\Documents\Indie Projects\WPF App\WindowInspector.App\obj\Release\net8.0-windows\
+C:\Users\Jacob\Documents\Indie Projects\WPF App\WindowInspector.App\obj\RElease\net8.0-windows\
 WindowInspector.App
 none
 false
@@ -12,8 +12,8 @@ TRACE;RELEASE;NET;NET8_0;NETCOREAPP
 C:\Users\Jacob\Documents\Indie Projects\WPF App\WindowInspector.App\App.xaml
 11407045341
 
-12524788989
-222-94420440
+12792483865
+222-638440319
 MainWindow.xaml;
 
 False
